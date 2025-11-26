@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  garfenter-postgres:
+    image: postgres:15-alpine
+    container_name: garfenter-postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-garfenter_erp}
+      - POSTGRES_USER=${POSTGRES_USER:-odoo}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-odoo}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - garfenter-db-data:/var/lib/postgresql/data/pgdata
+    networks:
+      - garfenter-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Garfenter ERP (Odoo)
+  garfenter-erp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: garfenter-erp
+    depends_on:
+      garfenter-postgres:
+        condition: service_healthy
+    environment:
+      - HOST=${DB_HOST:-garfenter-postgres}
+      - PORT=${DB_PORT:-5432}
+      - USER=${POSTGRES_USER:-odoo}
+      - PASSWORD=${POSTGRES_PASSWORD:-odoo}
+      - GARFENTER_LANG=${GARFENTER_LANG:-es_GT}
+      - GARFENTER_COUNTRY=${GARFENTER_COUNTRY:-GT}
+    ports:
+      - "${ODOO_PORT:-8069}:8069"
+      - "${ODOO_LONGPOLLING_PORT:-8072}:8072"
+    volumes:
+      - garfenter-odoo-data:/var/lib/odoo
+      - garfenter-extra-addons:/mnt/extra-addons
+      - ./odoo.garfenter.conf:/etc/odoo/odoo.conf:ro
+      # For development: mount source code
+      # - ./addons:/opt/odoo/addons
+      # - ./odoo:/opt/odoo/odoo
+    networks:
+      - garfenter-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8069/web/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "com.garfenter.service=erp"
+      - "com.garfenter.description=Garfenter ERP System"
+
+  # Nginx Reverse Proxy (Optional)
+  garfenter-nginx:
+    image: nginx:alpine
+    container_name: garfenter-nginx
+    depends_on:
+      - garfenter-erp
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - garfenter-nginx-logs:/var/log/nginx
+    networks:
+      - garfenter-network
+    restart: unless-stopped
+    profiles:
+      - with-nginx
+    labels:
+      - "com.garfenter.service=proxy"
+      - "com.garfenter.description=Nginx Reverse Proxy"
+
+volumes:
+  garfenter-db-data:
+    driver: local
+    labels:
+      - "com.garfenter.volume=database"
+  garfenter-odoo-data:
+    driver: local
+    labels:
+      - "com.garfenter.volume=odoo-data"
+  garfenter-extra-addons:
+    driver: local
+    labels:
+      - "com.garfenter.volume=custom-addons"
+  garfenter-nginx-logs:
+    driver: local
+    labels:
+      - "com.garfenter.volume=nginx-logs"
+
+networks:
+  garfenter-network:
+    driver: bridge
+    labels:
+      - "com.garfenter.network=main"
