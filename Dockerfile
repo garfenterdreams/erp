@@ -66,11 +66,14 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # Copy Odoo source code
 COPY --chown=odoo:odoo . /opt/odoo
 
-# Create necessary directories
+# Create necessary directories and copy config
 RUN mkdir -p /var/lib/odoo \
     /etc/odoo \
     /mnt/extra-addons \
     && chown -R odoo:odoo /var/lib/odoo /etc/odoo /mnt/extra-addons
+
+# Copy Odoo config file to the expected location
+COPY --chown=odoo:odoo odoo.garfenter.conf /etc/odoo/odoo.conf
 
 # Expose Odoo services
 EXPOSE 8069 8071 8072
