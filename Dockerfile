@@ -66,14 +66,15 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # Copy Odoo source code
 COPY --chown=odoo:odoo . /opt/odoo
 
-# Create necessary directories and copy config
+# Create necessary directories
 RUN mkdir -p /var/lib/odoo \
     /etc/odoo \
     /mnt/extra-addons \
     && chown -R odoo:odoo /var/lib/odoo /etc/odoo /mnt/extra-addons
 
-# Copy Odoo config file to the expected location
-COPY --chown=odoo:odoo odoo.garfenter.conf /etc/odoo/odoo.conf
+# Copy entrypoint script and make executable
+COPY --chown=odoo:odoo entrypoint.sh /opt/odoo/entrypoint.sh
+RUN chmod +x /opt/odoo/entrypoint.sh
 
 # Expose Odoo services
 EXPOSE 8069 8071 8072
@@ -84,5 +85,6 @@ USER odoo
 # Set the default config file
 ENV ODOO_RC=/etc/odoo/odoo.conf
 
-# Start Odoo
+# Use entrypoint to generate config from environment variables
+ENTRYPOINT ["/opt/odoo/entrypoint.sh"]
 CMD ["/opt/odoo/odoo-bin", "-c", "/etc/odoo/odoo.conf"]
